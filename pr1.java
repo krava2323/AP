@@ -5,32 +5,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Головний клас для запуску симуляції паркування.
- * Використовує Монітор для структурованого, зрозумілого виводу результатів.
- */
+
 public class ParkingSimulation {
 
-    // --- КОНФІГУРАЦІЯ ТА ГЛОБАЛЬНІ ІНСТРУМЕНТИ ---
     private static final int NUMBER_OF_CARS = 10;
-    private static final long SIMULATION_DURATION_MS = 20000; // 20 секунд
+    private static final long SIMULATION_DURATION_MS = 20000; 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-    /**
-     * Статичний метод для централізованого логування ключових подій.
-     */
+    
     public static void log(String message) {
         String time = LocalTime.now().format(TIME_FORMATTER);
         System.out.println(time + " | " + message);
     }
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- КЛАС PARKING: УПРАВЛІННЯ ПАРКУВАННЯМ ---
-// ------------------------------------------------------------------------------------------------------------------
-    
-    /**
-     * Імітація паркувального майданчика.
-     */
+
     static class Parking {
         public static final int DAY_CAPACITY = 5;  
         public static final int NIGHT_CAPACITY = 8; 
@@ -46,9 +34,7 @@ public class ParkingSimulation {
             return isDay ? DAY_CAPACITY : NIGHT_CAPACITY;
         }
 
-        /**
-         * Динамічно змінює ємність семафора при зміні часу доби.
-         */
+        
         public void updateCapacity() {
             synchronized (capacityLock) {
                 LocalTime now = LocalTime.now();
@@ -60,7 +46,6 @@ public class ParkingSimulation {
                     int diff = currentCapacity - totalPermits; 
 
                     if (diff < 0) {
-                        // Перехід: Ніч -> День. Забираємо зайві дозволи.
                         int permitsToDrain = totalPermits - currentCapacity;
                         if (semaphore.availablePermits() >= permitsToDrain) {
                              semaphore.acquireUninterruptibly(permitsToDrain);
@@ -73,7 +58,6 @@ public class ParkingSimulation {
                         }
                         log(" ЗМІНА ЛІМІТУ: **ДЕНЬ** (" + currentCapacity + " місць).");
                     } else if (diff > 0) {
-                        // Перехід: День -> Нiч. Додаємо дозволи.
                         semaphore.release(diff); 
                         log("ЗМІНА ЛІМІТУ: **НІЧ** (" + currentCapacity + " місць).");
                     }
@@ -81,37 +65,28 @@ public class ParkingSimulation {
             }
         }
 
-        /**
-         * Спроба припаркувати автомобіль (acquire).
-         */
+      
+     
         public void parkCar(String carName) throws InterruptedException {
             try {
-                semaphore.acquire(); // Thread State: WAITING
+                semaphore.acquire(); 
                 occupiedSpots.incrementAndGet();
                 long parkingTime = (long) (Math.random() * 5000) + 1000;
-                Thread.sleep(parkingTime); // Thread State: TIMED_WAITING
+                Thread.sleep(parkingTime); 
             } catch (InterruptedException e) {
                 log("ACC ПОМИЛКА: " + carName + " був перерваний.");
                 throw e;
             }
         }
 
-        /**
-         * Звільнення паркувального місця (release).
-         */
+     
         public void leaveCar(String carName) {
             semaphore.release();
             occupiedSpots.decrementAndGet();
         }
     }
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- КЛАС CAR: РЕАЛІЗАЦІЯ ПОТОКУ (RUNNABLE) ---
-// ------------------------------------------------------------------------------------------------------------------
 
-    /**
-     * Поток, що представляє автомобіль.
-     */
     static class Car implements Runnable {
         private final String name;
         private final Parking parking;
@@ -128,11 +103,9 @@ public class ParkingSimulation {
                 parking.parkCar(name);
                 hasAcquiredSpot = true; 
             } catch (InterruptedException e) {
-                // Обробка переривання
             } catch (Exception e) {
                  log("❌ КРИТИЧНА ПОМИЛКА " + name + ": " + e.getClass().getSimpleName());
             } finally {
-                // Гарантоване звільнення місця.
                 if (hasAcquiredSpot) {
                     parking.leaveCar(name);
                 }
@@ -140,13 +113,7 @@ public class ParkingSimulation {
         }
     }
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- КЛАС TIMEUPDATER: ЗМІНА ЄМНОСТІ ---
-// ------------------------------------------------------------------------------------------------------------------
 
-    /**
-     * Поток, що ініціює зміну ємності.
-     */
     static class TimeUpdater implements Runnable {
         private final Parking parking;
         private volatile boolean running = true; 
@@ -171,13 +138,7 @@ public class ParkingSimulation {
         }
     }
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- КЛАС MONITOR: СТРУКТУРОВАНИЙ ВИВІД СТАНУ ---
-// ------------------------------------------------------------------------------------------------------------------
 
-    /**
-     * Поток-Монітор, який періодично виводить чисту, структуровану таблицю стану.
-     */
     static class Monitor implements Runnable {
         private final Parking parking;
         private final List<Thread> carThreads;
@@ -194,26 +155,24 @@ public class ParkingSimulation {
         public void run() {
             while (running) {
                 try {
-                    Thread.sleep(1500); // Оновлення кожні 1.5 секунди
+                    Thread.sleep(1500); 
                     
                     int maxCapacity = parking.getCurrentCapacity(LocalTime.now());
                     int occupied = parking.occupiedSpots.get();
                     int available = parking.semaphore.availablePermits();
                     String time = LocalTime.now().format(TIME_FORMATTER);
 
-                    // --- Таблиця 1: Загальний стан Парковки ---
                     System.out.println("\n\n============================================ СТАН ПАРКОВКИ (" + time + ") ============================================");
                     
                     System.out.printf("| %-10s | %-12s | %-12s | %-12s |\n", "ТИП ЧАСУ", "МАКС. МIСЦЬ", "ЗАЙНЯТО", "ВІЛЬНО");
                     System.out.println("--------------------------------------------------------------------------");
                     System.out.printf("| %-10s | %-12d | %-12d | %-12d |\n", 
-                                      maxCapacity == Parking.DAY_CAPACITY ? "☀️ ДЕНЬ" : "🌙 НІЧ", 
+                                      maxCapacity == Parking.DAY_CAPACITY ? " ДЕНЬ" : "НІЧ", 
                                       maxCapacity, 
                                       occupied, 
                                       available);
                     System.out.println("==========================================================================");
 
-                    // --- Таблиця 2: Детальний стан Потоків-Автомобілів ---
                     System.out.printf("| %-15s | %-18s | %-20s |\n", "АВТОМОБIЛЬ", "СТАТУС (ЛЮДСЬК.)", "СТАН ПОТОКУ (Java)");
                     System.out.println("--------------------------------------------------------------------------");
 
@@ -222,7 +181,6 @@ public class ParkingSimulation {
                             String carStatus;
                             Thread.State state = t.getState();
                             
-                            // Інтерпретація стану
                             if (state == Thread.State.TIMED_WAITING) {
                                 carStatus = "Паркується (Sleep)";
                             } else if (state == Thread.State.WAITING || state == Thread.State.BLOCKED) {
@@ -246,13 +204,10 @@ public class ParkingSimulation {
         }
     }
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- ГОЛОВНИЙ МЕТОД ЗАПУСКУ СИМУЛЯЦІЇ ---
-// ------------------------------------------------------------------------------------------------------------------
 
     public static void main(String[] args) {
         System.out.println("==================================================================================================================================");
-        System.out.println("🚀 СИМУЛЯЦІЯ ПАРКУВАННЯ (Багатопотоковість з Semaphore)");
+        System.out.println(" СИМУЛЯЦІЯ ПАРКУВАННЯ ");
         System.out.println("----------------------------------------------------------------------------------------------------------------------------------");
         log("Симуляція розпочата. Тривалість: " + (SIMULATION_DURATION_MS / 1000) + " сек.");
         System.out.println("----------------------------------------------------------------------------------------------------------------------------------");
@@ -260,17 +215,14 @@ public class ParkingSimulation {
         Parking parking = new Parking();
         List<Thread> carThreads = new ArrayList<>();
 
-        // 1. Запуск потоку-оновлювача часу
-        TimeUpdater timeUpdater = new TimeUpdater(parking); // ВИПРАВЛЕНО
+        TimeUpdater timeUpdater = new TimeUpdater(parking); 
         Thread timeThread = new Thread(timeUpdater, "TimeUpdater");
         timeThread.start();
 
-        // 2. Запуск потоку-Монітора (для структурованого виводу)
         Monitor monitor = new Monitor(parking, carThreads);
         Thread monitorThread = new Thread(monitor, "Monitor");
         monitorThread.start();
 
-        // 3. Створення та запуск потоків-автомобілів
         for (int i = 1; i <= NUMBER_OF_CARS; i++) {
             Car car = new Car("Авто-" + i, parking);
             Thread carThread = new Thread(car, "Авто-" + i);
@@ -278,11 +230,9 @@ public class ParkingSimulation {
             carThread.start();
         }
 
-        // 4. Обмеження часу симуляції та коректне завершення
         try {
             Thread.sleep(SIMULATION_DURATION_MS); 
             
-            // Зупинка допоміжних потоків
             timeUpdater.stop();
             timeThread.interrupt();
             timeThread.join();
@@ -292,16 +242,14 @@ public class ParkingSimulation {
             monitorThread.join();
 
             System.out.println("\n\n==================================================================================================================================");
-            log("🛑 СИМУЛЯЦІЯ ЗАВЕРШУЄТЬСЯ. Примусове переривання потоків.");
+            log("СИМУЛЯЦІЯ ЗАВЕРШУЄТЬСЯ. Примусове переривання потоків.");
             
-            // Примусове завершення потоків-автомобілів
             for (Thread t : carThreads) {
                 if (t.isAlive()) {
                     t.interrupt(); 
                 }
             }
             
-            // Очікування завершення
             for (Thread t : carThreads) {
                 try {
                     t.join(500); 
@@ -316,7 +264,7 @@ public class ParkingSimulation {
         }
         
         System.out.println("\n==================================================================================================================================");
-        log("✅ СИМУЛЯЦІЯ УСПІШНО ЗАВЕРШЕНА.");
+        log(" СИМУЛЯЦІЯ УСПІШНО ЗАВЕРШЕНА.");
         System.out.println("==================================================================================================================================");
     }
 }
