@@ -1,0 +1,180 @@
+import java.util.*;
+import java.util.concurrent.*;
+import java.io.*;
+
+public class TaskBalancerApp {
+    
+    private static final String TEST_DIR_PATH = "test_data_dir";
+
+    public static long runWorkStealing(int[] array) {
+        long start = System.nanoTime();
+        
+        try (ForkJoinPool pool = new ForkJoinPool()) {
+            ArrayPairSumTask task = new ArrayPairSumTask(array, 0, array.length);
+            long result = pool.invoke(task);
+            long end = System.nanoTime();
+            
+            System.out.printf("  [Work Stealing] Час виконання: %.6f с\n", (end - start) / 1e9);
+            return result;
+        }
+    }
+
+    
+    public static long runWorkDealing(int[] array, int numThreads) throws Exception {
+        long start = System.nanoTime();
+        
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        List<Future<Long>> results = new ArrayList<>();
+        
+        int arraySize = array.length;
+        int chunkSize = arraySize / numThreads; 
+        
+        for (int i = 0; i < numThreads; i++) {
+            int startIndex = i * chunkSize;
+            int endIndex = (i == numThreads - 1) ? arraySize : (i + 1) * chunkSize; 
+
+            Callable<Long> dealerTask = () -> {
+                long sum = 0;
+                for (int k = startIndex; k < endIndex - 1; k++) {
+                    sum += (long)array[k] + array[k + 1];
+                }
+                return sum;
+            };
+            results.add(executor.submit(dealerTask));
+        }
+        
+        long totalSum = 0;
+        for (int i = 0; i < numThreads; i++) {
+            totalSum += results.get(i).get();
+            
+            if (i < numThreads - 1) {
+                int midIndex = (i + 1) * chunkSize;
+                if (midIndex > 0 && midIndex < arraySize) {
+                    totalSum += (long)array[midIndex - 1] + array[midIndex];
+                }
+            }
+        }
+        
+        executor.shutdown();
+        executor.awaitTermination(60, TimeUnit.SECONDS);
+
+        long end = System.nanoTime();
+        System.out.printf("  [Work Dealing] Час виконання: %.6f с\n", (end - start) / 1e9);
+        return totalSum;
+    }
+
+
+    public static int runFileSearch(String rootPath, String extension) {
+        long start = System.nanoTime();
+        File rootDir = new File(rootPath);
+
+        if (!rootDir.exists() || !rootDir.isDirectory()) {
+            System.err.println("Помилка: Директорія не знайдена або не є директорією.");
+            return 0;
+        }
+
+        try (ForkJoinPool pool = new ForkJoinPool()) {
+            FileSearchTask task = new FileSearchTask(rootDir, extension);
+            int result = pool.invoke(task);
+            long end = System.nanoTime();
+            
+            System.out.printf("  [File Search (Work Stealing)] Час виконання: %.6f с\n", (end - start) / 1e9);
+            return result;
+        }
+    }
+
+
+
+    private static int[] generateRandomArray(int size, int min, int max) {
+        Random random = new Random();
+        int[] array = new int[size];
+        for (int i = 0; i < size; i++) {
+            array[i] = random.nextInt(max - min + 1) + min;
+        }
+        return array;
+    }
+
+    private static int safeReadInt(Scanner scanner) {
+        while (!scanner.hasNextInt()) {
+            System.err.print("Некоректне введення. Спробуйте ще раз: ");
+            scanner.next();
+        }
+        int value = scanner.nextInt();
+        scanner.nextLine(); 
+        return value;
+    }
+    
+    private static void createTestDirectory(String rootPath) {
+        File root = new File(rootPath);
+        root.mkdirs(); 
+
+        try {
+            new File(root, "doc1.pdf").createNewFile();
+            new File(root, "data.txt").createNewFile();
+            
+            File sub1 = new File(root, "SubDir_Small"); 
+            sub1.mkdirs();
+            new File(sub1, "doc2.pdf").createNewFile();
+            
+            File sub2 = new File(root, "SubDir_Large"); 
+            sub2.mkdirs();
+            for (int i = 0; i < 50; i++) {
+                new File(sub2, "file_" + i + ".pdf").createNewFile();
+            }
+            
+        } catch (IOException e) {
+            System.err.println("Помилка створення тестових файлів.");
+        }
+    }
+    
+    public static void main(String[] args) throws Exception {
+        Scanner scanner = new Scanner(System.in);
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        System.out.println("🤖 Кількість потоків (ядер): " + numThreads);
+        
+        
+        System.out.println("\n--- 1. Попарна Сума Масиву (Work Stealing vs Dealing) ---");
+        
+        System.out.print("Введіть кількість елементів масиву : ");
+        int size = safeReadInt(scanner);
+        
+        System.out.print("Введіть мінімальне значення елемента: ");
+        int minVal = safeReadInt(scanner);
+        
+        System.out.print("Введіть максимальне значення елемента: ");
+        int maxVal = safeReadInt(scanner);
+        
+        if (size <= 1) {
+            System.err.println("Розмір масиву має бути > 1.");
+            scanner.close();
+            return;
+        }
+
+        int[] array = generateRandomArray(size, minVal, maxVal);
+        System.out.printf("  Масив %d елементів (діапазон [%d; %d]) згенеровано.\n", size, minVal, maxVal);
+        
+        long sumStealing = runWorkStealing(array);
+        
+        long sumDealing = runWorkDealing(array, numThreads);
+
+        System.out.println("  Підсумкова сума (WS): " + sumStealing);
+        System.out.println("  Підсумкова сума (WD): " + sumDealing);
+        
+
+        System.out.println("\n--- 2. Рекурсивний Пошук Файлів (Work Stealing) ---");
+        
+        createTestDirectory(TEST_DIR_PATH); 
+        
+        System.out.print("Введіть директорію для пошуку (за замовчуванням: " + TEST_DIR_PATH + "): ");
+        String dirPath = scanner.nextLine().trim();
+        if (dirPath.isEmpty()) dirPath = TEST_DIR_PATH;
+
+        System.out.print("Введіть формат файлу (наприклад, pdf, txt, *): ");
+        String format = scanner.nextLine().trim();
+        
+        int fileCount = runFileSearch(dirPath, format);
+        System.out.println("Кількість знайдених файлів " + format + ": " + fileCount);
+        
+        scanner.close();
+    }
+}
