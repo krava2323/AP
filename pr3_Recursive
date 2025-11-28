@@ -1,0 +1,43 @@
+import java.util.concurrent.RecursiveTask;
+
+class ArrayPairSumTask extends RecursiveTask<Long> {
+    private final int[] array;
+    private final int start;
+    private final int end;
+    private static final int THRESHOLD = 10000; 
+
+    public ArrayPairSumTask(int[] array, int start, int end) {
+        this.array = array;
+        this.start = start;
+        this.end = end;
+    }
+
+    @Override
+    protected Long compute() {
+        if (end - start <= THRESHOLD) {
+            long sum = 0;
+            for (int i = start; i < end - 1; i++) {
+                sum += (long)array[i] + array[i + 1];
+            }
+            return sum;
+        } else {
+            int mid = start + (end - start) / 2;
+            
+            ArrayPairSumTask left = new ArrayPairSumTask(array, start, mid);
+            ArrayPairSumTask right = new ArrayPairSumTask(array, mid, end);
+
+            left.fork();
+            
+            long rightResult = right.compute(); 
+            long leftResult = left.join(); 
+
+          .
+            long sumAtMid = 0;
+            if (mid > start && mid < end) {
+                 sumAtMid = (long)array[mid - 1] + array[mid];
+            }
+            
+            return leftResult + rightResult + sumAtMid;
+        }
+    }
+}
