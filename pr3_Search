@@ -1,0 +1,41 @@
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.RecursiveTask;
+
+class FileSearchTask extends RecursiveTask<Integer> {
+    private final File directory;
+    private final String targetExtension;
+
+    public FileSearchTask(File directory, String targetExtension) {
+        this.directory = directory;
+        this.targetExtension = targetExtension.startsWith(".") ? targetExtension.toLowerCase() : "." + targetExtension.toLowerCase();
+    }
+
+    @Override
+    protected Integer compute() {
+        int count = 0;
+        List<FileSearchTask> subtasks = new ArrayList<>();
+        File[] files = directory.listFiles();
+
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    FileSearchTask task = new FileSearchTask(file, targetExtension);
+                    task.fork(); 
+                    subtasks.add(task);
+                } else if (file.isFile()) {
+                    if (file.getName().toLowerCase().endsWith(targetExtension)) {
+                        count++;
+                    }
+                }
+            }
+        }
+        
+        for (FileSearchTask task : subtasks) {
+            count += task.join();
+        }
+        
+        return count;
+    }
+}
